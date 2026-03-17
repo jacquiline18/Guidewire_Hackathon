@@ -6,7 +6,6 @@ InsurIntel AI is a Phase-1 prototype of an AI-powered parametric insurance syste
 
 The system detects disruptions using real-time or simulated data, verifies rider location, performs fraud checks, and automatically processes claims.
 
-This project was built for Hackathon 2026.
 
 --------------------------------------------------
 
@@ -67,7 +66,7 @@ Rider can activate a weekly coverage plan.
 Example:
 
 Premium: ₹30 / week  
-Coverage: ₹500 per disruption
+Coverage: ₹700 per disruption
 
 Insurance must be active before the event.
 
