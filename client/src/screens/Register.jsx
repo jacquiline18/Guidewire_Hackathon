@@ -1,50 +1,281 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 
+const RIDER_IMAGES = [
+  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80",
+  "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=1200&q=80",
+  "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200&q=80",
+  "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80",
+  "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200&q=80",
+];
+
+const PLATFORMS = ["Swiggy", "Zomato", "Blinkit", "Zepto", "Dunzo"];
+const CITIES = ["Chennai", "Bangalore", "Hyderabad", "Mumbai", "Delhi"];
+const DELIVERY_TYPES = ["Food Delivery", "Grocery", "Package", "Medicine"];
+
+const PLANS = [
+  {
+    id: "basic", name: "Basic", emoji: "🛡️",
+    weeklyPremium: 30, maxCompensation: 500,
+    coverage: ["Heavy Rain", "Extreme Heat"],
+    color: "#2d9e5f", bg: "#eafaf1", border: "#c8ead8", tag: "Most Popular",
+  },
+  {
+    id: "premium", name: "Premium", emoji: "⭐",
+    weeklyPremium: 60, maxCompensation: 1000,
+    coverage: ["Heavy Rain", "Extreme Heat", "High Pollution", "Cyclone Alert"],
+    color: "#6c3fc5", bg: "#f3eeff", border: "#d8c8f5", tag: "Best Coverage",
+  },
+];
+
 export default function Register({ onRegistered }) {
-  const [form, setForm] = useState({ name: "", phone: "", city: "Chennai", platform: "Swiggy", dailyIncome: "", deliveryType: "Food Delivery" });
+  // step and animClass are ONLY changed on navigation, never on typing
+  const [step, setStep] = useState(0);
+  const [animClass, setAnimClass] = useState("slide-enter-right");
+  const [bgIndex, setBgIndex] = useState(0);
+  const [form, setForm] = useState({
+    name: "", phone: "", platform: "Swiggy", city: "Chennai",
+    dailyIncome: "", deliveryType: "Food Delivery", plan: null,
+  });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const navigating = useRef(false);
 
-  const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  useEffect(() => {
+    const t = setInterval(() => setBgIndex((i) => (i + 1) % RIDER_IMAGES.length), 4000);
+    return () => clearInterval(t);
+  }, []);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    const res = await api.registerRider(form);
-    setLoading(false);
-    if (res.error) return setError(res.error);
-    onRegistered(res);
+  // handle only updates form — never triggers re-animation
+  const handle = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+  const goTo = (next) => {
+    if (navigating.current) return;
+    navigating.current = true;
+    const dir = next > step ? "forward" : "back";
+    const exitClass = dir === "forward" ? "slide-exit-left" : "slide-exit-right";
+    const enterClass = dir === "forward" ? "slide-enter-right" : "slide-enter-left";
+    setAnimClass(exitClass);
+    setTimeout(() => {
+      setStep(next);
+      setAnimClass(enterClass);
+      navigating.current = false;
+    }, 320);
   };
 
-  return (
-    <div className="screen">
-      <div className="card register-card">
-        <h2>🛵 Create Rider Account</h2>
-        <form onSubmit={submit}>
-          <label>Name</label>
-          <input name="name" placeholder="Ravi Kumar" value={form.name} onChange={handle} required />
-          <label>Phone</label>
-          <input name="phone" placeholder="9876543210" value={form.phone} onChange={handle} required />
-          <label>City</label>
-          <select name="city" value={form.city} onChange={handle}>
-            {["Chennai", "Bangalore", "Hyderabad", "Mumbai", "Delhi"].map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <label>Delivery Platform</label>
-          <select name="platform" value={form.platform} onChange={handle}>
-            {["Swiggy", "Zomato", "Blinkit", "Zepto", "Dunzo"].map((p) => <option key={p}>{p}</option>)}
-          </select>
-          <label>Average Daily Income (₹)</label>
-          <input name="dailyIncome" type="number" placeholder="500" value={form.dailyIncome} onChange={handle} required />
-          <label>Delivery Type</label>
-          <select name="deliveryType" value={form.deliveryType} onChange={handle}>
-            {["Food Delivery", "Grocery", "Package", "Medicine"].map((t) => <option key={t}>{t}</option>)}
-          </select>
-          {error && <p className="error">{error}</p>}
-          <button type="submit" disabled={loading}>{loading ? "Registering..." : "Register"}</button>
-        </form>
+  const selectPlan = async (plan) => {
+    setForm((f) => ({ ...f, plan }));
+    setLoading(true);
+    const res = await api.registerRider({
+      name: form.name, phone: form.phone, city: form.city,
+      platform: form.platform, dailyIncome: form.dailyIncome,
+      deliveryType: form.deliveryType,
+    });
+    setLoading(false);
+    if (res.riderId) onRegistered({ ...res, selectedPlan: plan });
+  };
+
+  const BG = () => (
+    <>
+      {RIDER_IMAGES.map((src, i) => (
+        <div key={i} className="welcome-bg" style={{
+          backgroundImage: `url(${src})`,
+          opacity: i === bgIndex ? 1 : 0,
+          transition: "opacity 1.2s ease-in-out",
+        }} />
+      ))}
+      <div className="welcome-overlay" />
+    </>
+  );
+
+  // ── Step 0: Welcome ──────────────────────────────────────────
+  if (step === 0) return (
+    <div className="reg-shell">
+      <BG />
+      <div className={`reg-content ${animClass}`}>
+        <div className="welcome-logo">🛡️ InsurIntel</div>
+        <h1 className="welcome-title">Protect Your Income.<br />Ride Without Fear.</h1>
+        <p className="welcome-sub">
+          Weather disrupting your deliveries? InsurIntel automatically detects disruptions
+          and credits compensation straight to your wallet — no claims needed.
+        </p>
+        <div className="welcome-stats">
+          <div className="w-stat"><strong>10,000+</strong><span>Riders Protected</span></div>
+          <div className="w-divider" />
+          <div className="w-stat"><strong>₹50L+</strong><span>Paid Out</span></div>
+          <div className="w-divider" />
+          <div className="w-stat"><strong>5 Cities</strong><span>Active Coverage</span></div>
+        </div>
+        <button className="welcome-btn" onClick={() => goTo(1)}>
+          Get Started — Register Free →
+        </button>
+        <p className="welcome-hint">Takes less than 2 minutes</p>
       </div>
     </div>
   );
+
+  // ── Step 1: Name + Platform ──────────────────────────────────
+  if (step === 1) return (
+    <div className="reg-shell">
+      <BG />
+      <div className={`reg-content ${animClass}`}>
+        <StepBar current={1} total={4} />
+        <p className="reg-step-label">Step 1 of 4</p>
+        <h1 className="reg-title">Hey there! 👋<br />What's your name?</h1>
+        <p className="reg-sub">Tell us who you are and where you deliver.</p>
+        <div className="reg-fields">
+          <input className="reg-input" name="name" placeholder="Your full name"
+            value={form.name} onChange={handle} autoFocus />
+          <input className="reg-input" name="phone" placeholder="Phone number"
+            value={form.phone} onChange={handle} />
+        </div>
+        <p className="reg-field-label">Which platform do you deliver for?</p>
+        <div className="platform-grid">
+          {PLATFORMS.map((p) => (
+            <button key={p} type="button"
+              className={`platform-btn ${form.platform === p ? "platform-selected" : ""}`}
+              onClick={() => setForm((f) => ({ ...f, platform: p }))}>
+              {platformEmoji(p)} {p}
+            </button>
+          ))}
+        </div>
+        <p className="reg-field-label">Delivery Type</p>
+        <div className="platform-grid">
+          {DELIVERY_TYPES.map((t) => (
+            <button key={t} type="button"
+              className={`platform-btn ${form.deliveryType === t ? "platform-selected" : ""}`}
+              onClick={() => setForm((f) => ({ ...f, deliveryType: t }))}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="reg-actions">
+          <button className="reg-btn-ghost" onClick={() => goTo(0)}>← Back</button>
+          <button className="reg-btn-primary" disabled={!form.name || !form.phone}
+            onClick={() => goTo(2)}>Continue →</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Step 2: City ─────────────────────────────────────────────
+  if (step === 2) return (
+    <div className="reg-shell">
+      <BG />
+      <div className={`reg-content ${animClass}`}>
+        <StepBar current={2} total={4} />
+        <p className="reg-step-label">Step 2 of 4</p>
+        <h1 className="reg-title">Where do you work,<br />{form.name.split(" ")[0]}? 📍</h1>
+        <p className="reg-sub">We monitor live weather in your city to protect you.</p>
+        <div className="city-grid">
+          {CITIES.map((c) => (
+            <button key={c} type="button"
+              className={`city-btn ${form.city === c ? "city-selected" : ""}`}
+              onClick={() => setForm((f) => ({ ...f, city: c }))}>
+              <span className="city-icon">{cityEmoji(c)}</span>
+              <span>{c}</span>
+            </button>
+          ))}
+        </div>
+        <div className="reg-info-chip">
+          📡 Live weather data for <strong>{form.city}</strong> will auto-trigger your claims.
+        </div>
+        <div className="reg-actions">
+          <button className="reg-btn-ghost" onClick={() => goTo(1)}>← Back</button>
+          <button className="reg-btn-primary" onClick={() => goTo(3)}>Continue →</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Step 3: Income ───────────────────────────────────────────
+  if (step === 3) return (
+    <div className="reg-shell">
+      <BG />
+      <div className={`reg-content ${animClass}`}>
+        <StepBar current={3} total={4} />
+        <p className="reg-step-label">Step 3 of 4</p>
+        <h1 className="reg-title">What's your average<br />daily income? 💰</h1>
+        <p className="reg-sub">This sets your compensation when disruptions occur.</p>
+        <input className="reg-input reg-input-large" name="dailyIncome" type="number"
+          placeholder="e.g. 500" value={form.dailyIncome} onChange={handle} autoFocus />
+        <div className="quick-amounts">
+          {[300, 500, 700, 1000].map((amt) => (
+            <button key={amt} type="button"
+              className={`quick-btn ${form.dailyIncome === String(amt) ? "quick-selected" : ""}`}
+              onClick={() => setForm((f) => ({ ...f, dailyIncome: String(amt) }))}>
+              ₹{amt}
+            </button>
+          ))}
+        </div>
+        {form.dailyIncome && (
+          <div className="reg-info-chip">
+            📊 Weekly income: <strong>₹{form.dailyIncome * 7}</strong> &nbsp;·&nbsp;
+            🛡️ Compensated up to <strong>₹{form.dailyIncome}/day</strong>
+          </div>
+        )}
+        <div className="reg-actions">
+          <button className="reg-btn-ghost" onClick={() => goTo(2)}>← Back</button>
+          <button className="reg-btn-primary" disabled={!form.dailyIncome}
+            onClick={() => goTo(4)}>Choose a Plan →</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Step 4: Plan Selection ───────────────────────────────────
+  if (step === 4) return (
+    <div className="reg-shell">
+      <BG />
+      <div className={`reg-content ${animClass}`} style={{ maxWidth: 780 }}>
+        <StepBar current={4} total={4} />
+        <p className="reg-step-label">Step 4 of 4</p>
+        <h1 className="reg-title">Choose your plan 🛡️</h1>
+        <p className="reg-sub">Based on ₹{form.dailyIncome}/day in {form.city}.</p>
+        <div className="plans-grid">
+          {PLANS.map((plan) => (
+            <div key={plan.id}
+              className={`plan-card ${form.plan?.id === plan.id ? "plan-selected" : ""}`}
+              style={{ "--plan-color": plan.color, "--plan-bg": plan.bg, "--plan-border": plan.border }}
+              onClick={() => setForm((f) => ({ ...f, plan }))}>
+              <div className="plan-tag">{plan.tag}</div>
+              <div className="plan-emoji">{plan.emoji}</div>
+              <h3 className="plan-name">{plan.name}</h3>
+              <div className="plan-price">
+                <span className="plan-amount">₹{plan.weeklyPremium}</span>
+                <span className="plan-period">/week</span>
+              </div>
+              <div className="plan-divider" />
+              <ul className="plan-features">
+                {plan.coverage.map((c) => <li key={c}><span>✓</span> {c}</li>)}
+              </ul>
+              <div className="plan-payout">Max payout: <strong>₹{plan.maxCompensation}/event</strong></div>
+            </div>
+          ))}
+        </div>
+        <div className="reg-actions">
+          <button className="reg-btn-ghost" onClick={() => goTo(3)}>← Back</button>
+          <button className="reg-btn-primary" disabled={!form.plan || loading}
+            onClick={() => form.plan && selectPlan(form.plan)}>
+            {loading ? "Setting up..." : `Activate ${form.plan?.name || ""} Plan →`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepBar({ current, total }) {
+  return (
+    <div className="reg-step-bar">
+      {Array.from({ length: total }).map((_, i) => (
+        <div key={i} className={`reg-step-dot ${i < current ? "reg-dot-done" : i === current - 1 ? "reg-dot-active" : ""}`} />
+      ))}
+    </div>
+  );
+}
+function platformEmoji(p) {
+  return { Swiggy: "🧡", Zomato: "❤️", Blinkit: "💛", Zepto: "💜", Dunzo: "💙" }[p] || "🛵";
+}
+function cityEmoji(c) {
+  return { Chennai: "🌊", Bangalore: "🌳", Hyderabad: "🏰", Mumbai: "🌆", Delhi: "🏛️" }[c] || "📍";
 }
