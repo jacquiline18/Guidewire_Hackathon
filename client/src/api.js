@@ -7,6 +7,9 @@ export const api = {
   getRiskScore: (riderId) =>
     fetch(`${BASE}/riders/${riderId}/risk`).then((r) => r.json()),
 
+  getRiskPreview: (data) =>
+    fetch(`${BASE}/riders/risk-preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then((r) => r.json()),
+
   getPlan: () =>
     fetch(`${BASE}/insurance/plan`).then((r) => r.json()),
 

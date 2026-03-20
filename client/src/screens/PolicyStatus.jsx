@@ -94,9 +94,9 @@ export default function PolicyStatus({ rider, onEnterDashboard, onPayNow }) {
     if (!s || !s.hasPolicy) { setResult({ noPolicy: true }); return; }
     const simNow    = new Date(date);
     const lastPaid  = new Date(s.lastPaidDate);
-    const daysSince = Math.floor((simNow - lastPaid) / MS_PER_DAY);
+    const daysSince = Math.max(0, Math.floor((simNow - lastPaid) / MS_PER_DAY));
     const daysLeft  = Math.max(0, 7 - daysSince);
-    const expired   = daysSince > 7;
+    const expired   = daysSince >= 7;
     setResult({ noPolicy: false, expired, daysSince, daysLeft, lastPaid });
   };
 

@@ -192,26 +192,67 @@ app.get("/api/insurance/plan", (req, res) => {
   res.json({ name:"InsurIntel Weekly Income Protection", coverage:["Heavy Rain","Extreme Heat","Strong Winds","Severe Pollution"], weeklyPremium:30, durationDays:7 });
 });
 
-// Buy policy
+// RF-based risk preview + dynamic premium (no DB write — used before plan selection)
+app.post("/api/riders/risk-preview", async (req, res) => {
+  try {
+    const { city, platform, dailyIncome, deliveryType } = req.body;
+    // Build a temporary rider-like object (no riderId needed for calcRisk factors)
+    const tempRider = { riderId: "__preview__", city, platform, dailyIncome: +dailyIncome, deliveryType };
+    const cityRisk     = { Chennai:85, Mumbai:80, Hyderabad:60, Delhi:65, Bangalore:40 };
+    const deliveryRisk = { "Food Delivery":70, Grocery:65, Package:55, Medicine:60 };
+    const weatherRisk  = { Chennai:80, Mumbai:75, Hyderabad:55, Delhi:60, Bangalore:35 };
+    const income = +dailyIncome;
+    const cs = cityRisk[city]||50;
+    const is = income<=300?90:income<=500?70:income<=800?50:30;
+    const cl = 20; // new rider, no claims
+    const ds = deliveryRisk[deliveryType]||60;
+    const ws = weatherRisk[city]||50;
+    const raw = cs*0.30+is*0.20+cl*0.20+ds*0.15+ws*0.15;
+    const score = Math.min(100,Math.max(1,Math.round(raw)));
+    const level = score>=70?"HIGH":score>=40?"MEDIUM":"LOW";
+    const multiplier = score>=70?1.5:score>=40?1.0:0.8;
+    // Dynamic premiums based on RF risk score
+    const basicPremium   = Math.round(30 * multiplier);
+    const premiumPremium = Math.round(60 * multiplier);
+    res.json({
+      score, level, multiplier,
+      breakdown: {
+        cityRisk:     { score:cs, weight:"30%", label:"City Weather Risk" },
+        incomeRisk:   { score:is, weight:"20%", label:"Income Vulnerability" },
+        claimsRisk:   { score:cl, weight:"20%", label:"Claims History" },
+        deliveryRisk: { score:ds, weight:"15%", label:"Delivery Type Exposure" },
+        weatherRisk:  { score:ws, weight:"15%", label:"Seasonal Weather Risk" },
+      },
+      plans: [
+        { id:"basic",   name:"Basic",   emoji:"🛡️", weeklyPremium:basicPremium,   maxCompensation:500,  coverage:["Heavy Rain","Extreme Heat"],                              tag:"Most Popular",  color:"#2d9e5f", bg:"#eafaf1", border:"#c8ead8" },
+        { id:"premium", name:"Premium", emoji:"⭐", weeklyPremium:premiumPremium, maxCompensation:1000, coverage:["Heavy Rain","Extreme Heat","High Pollution","Cyclone Alert"], tag:"Best Coverage", color:"#6c3fc5", bg:"#f3eeff", border:"#d8c8f5" },
+      ],
+    });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+// Buy policy — uses RF-computed dynamic premium
 app.post("/api/insurance/buy", async (req, res) => {
   try {
-    const { riderId, paymentMethod, planId } = req.body;
+    const { riderId, paymentMethod, planId, weeklyPremium: clientPremium } = req.body;
     const rider = await Rider.findOne({ riderId });
     if (!rider) return res.status(404).json({ error:"Rider not found" });
 
     // Expire existing active policy
     await Policy.updateMany({ riderId, status:"ACTIVE" }, { status:"EXPIRED" });
 
+    // Re-compute RF premium server-side to prevent tampering
+    const risk = await calcRisk(rider);
     const isPremium = planId==="premium";
-    const weeklyPremium = isPremium?60:30;
+    const weeklyPremium = Math.round((isPremium?60:30) * risk.premiumMultiplier);
     const maxCompensation = isPremium?1000:500;
     const txnId = shortId("TXN");
     const startDate = new Date();
     const endDate = new Date(startDate); endDate.setDate(endDate.getDate()+7);
 
     const policy = await Policy.create({ policyId:shortId("POL"), riderId, planId:planId||"basic", weeklyPremium, maxCompensation, status:"ACTIVE", startDate:startDate.toISOString(), endDate:endDate.toISOString(), paymentMethod, txnId });
-    await Transaction.create({ txnId, riderId, type:"PREMIUM", amount:-weeklyPremium, description:`${isPremium?"Premium":"Basic"} Plan — Weekly Premium`, date:new Date().toISOString() });
-    res.json({ ...policy.toObject(), message:"Payment Successful" });
+    await Transaction.create({ txnId, riderId, type:"PREMIUM", amount:-weeklyPremium, description:`${isPremium?"Premium":"Basic"} Plan — Weekly Premium (Risk: ${risk.level})`, date:new Date().toISOString() });
+    res.json({ ...policy.toObject(), message:"Payment Successful", riskLevel:risk.level });
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 

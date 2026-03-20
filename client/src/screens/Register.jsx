@@ -29,7 +29,6 @@ const PLANS = [
 ];
 
 export default function Register({ onRegistered }) {
-  // step and animClass are ONLY changed on navigation, never on typing
   const [step, setStep] = useState(0);
   const [animClass, setAnimClass] = useState("slide-enter-right");
   const [bgIndex, setBgIndex] = useState(0);
@@ -38,6 +37,8 @@ export default function Register({ onRegistered }) {
     dailyIncome: "", deliveryType: "Food Delivery", plan: null,
   });
   const [loading, setLoading] = useState(false);
+  const [riskPreview, setRiskPreview] = useState(null);  // RF result + dynamic plans
+  const [loadingRisk, setLoadingRisk] = useState(false);
   const navigating = useRef(false);
 
   useEffect(() => {
@@ -60,6 +61,21 @@ export default function Register({ onRegistered }) {
       setAnimClass(enterClass);
       navigating.current = false;
     }, 320);
+  };
+
+  // Fetch RF risk preview when moving to step 4
+  const goToPlanStep = async () => {
+    if (navigating.current) return;
+    setLoadingRisk(true);
+    try {
+      const preview = await api.getRiskPreview({
+        city: form.city, platform: form.platform,
+        dailyIncome: form.dailyIncome, deliveryType: form.deliveryType,
+      });
+      setRiskPreview(preview);
+    } catch { setRiskPreview(null); }
+    setLoadingRisk(false);
+    goTo(4);
   };
 
   const selectPlan = async (plan) => {
@@ -215,53 +231,111 @@ export default function Register({ onRegistered }) {
         )}
         <div className="reg-actions">
           <button className="reg-btn-ghost" onClick={() => goTo(2)}>← Back</button>
-          <button className="reg-btn-primary" disabled={!form.dailyIncome}
-            onClick={() => goTo(4)}>Choose a Plan →</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── Step 4: Plan Selection ───────────────────────────────────
-  if (step === 4) return (
-    <div className="reg-shell">
-      <BG />
-      <div className={`reg-content ${animClass}`} style={{ maxWidth: 780 }}>
-        <StepBar current={4} total={4} />
-        <p className="reg-step-label">Step 4 of 4</p>
-        <h1 className="reg-title">Choose your plan 🛡️</h1>
-        <p className="reg-sub">Based on ₹{form.dailyIncome}/day in {form.city}.</p>
-        <div className="plans-grid">
-          {PLANS.map((plan) => (
-            <div key={plan.id}
-              className={`plan-card ${form.plan?.id === plan.id ? "plan-selected" : ""}`}
-              style={{ "--plan-color": plan.color, "--plan-bg": plan.bg, "--plan-border": plan.border }}
-              onClick={() => setForm((f) => ({ ...f, plan }))}>
-              <div className="plan-tag">{plan.tag}</div>
-              <div className="plan-emoji">{plan.emoji}</div>
-              <h3 className="plan-name">{plan.name}</h3>
-              <div className="plan-price">
-                <span className="plan-amount">₹{plan.weeklyPremium}</span>
-                <span className="plan-period">/week</span>
-              </div>
-              <div className="plan-divider" />
-              <ul className="plan-features">
-                {plan.coverage.map((c) => <li key={c}><span>✓</span> {c}</li>)}
-              </ul>
-              <div className="plan-payout">Max payout: <strong>₹{plan.maxCompensation}/event</strong></div>
-            </div>
-          ))}
-        </div>
-        <div className="reg-actions">
-          <button className="reg-btn-ghost" onClick={() => goTo(3)}>← Back</button>
-          <button className="reg-btn-primary" disabled={!form.plan || loading}
-            onClick={() => form.plan && selectPlan(form.plan)}>
-            {loading ? "Setting up..." : `Activate ${form.plan?.name || ""} Plan →`}
+          <button className="reg-btn-primary" disabled={!form.dailyIncome || loadingRisk}
+            onClick={() => form.dailyIncome && goToPlanStep()}>
+            {loadingRisk ? "Analysing Risk..." : "Choose a Plan →"}
           </button>
         </div>
       </div>
     </div>
   );
+
+  // ── Step 4: Risk Preview + Plan Selection ───────────────────
+  if (step === 4) {
+    const plans = riskPreview?.plans || PLANS;
+    const risk  = riskPreview;
+    const levelColor  = { HIGH: "#ef4444", MEDIUM: "#f59e0b", LOW: "#10b981" };
+    const levelBg     = { HIGH: "rgba(239,68,68,0.15)",    MEDIUM: "rgba(245,158,11,0.15)",  LOW: "rgba(16,185,129,0.15)" };
+    const levelBorder = { HIGH: "rgba(239,68,68,0.4)",     MEDIUM: "rgba(245,158,11,0.4)",   LOW: "rgba(16,185,129,0.4)" };
+    return (
+      <div className="reg-shell">
+        <BG />
+        <div className={`reg-content ${animClass}`} style={{ maxWidth: 820 }}>
+          <StepBar current={4} total={4} />
+          <p className="reg-step-label">Step 4 of 4</p>
+          <h1 className="reg-title">Your Risk Profile &amp; Plans 🛡️</h1>
+          <p className="reg-sub">RF model analysed your profile. Premiums are adjusted based on your risk score.</p>
+
+          {/* ── RF Risk Score Summary ── */}
+          {risk && (
+            <div style={{ background: levelBg[risk.level], border: `1.5px solid ${levelBorder[risk.level]}`, borderRadius: 18, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${levelColor[risk.level]}22`, border: `3px solid ${levelColor[risk.level]}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: "1.3rem", fontWeight: 900, color: levelColor[risk.level], lineHeight: 1 }}>{risk.score}</span>
+                    <span style={{ fontSize: "0.55rem", color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase" }}>/100</span>
+                  </div>
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${levelColor[risk.level]}22`, border: `1px solid ${levelColor[risk.level]}55`, borderRadius: 20, padding: "3px 12px", marginBottom: 4 }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: 800, color: levelColor[risk.level] }}>
+                        {risk.level === "HIGH" ? "⚠️ HIGH RISK" : risk.level === "MEDIUM" ? "🔶 MEDIUM RISK" : "✅ LOW RISK"}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.7)", lineHeight: 1.5 }}>
+                      Premium multiplier: <strong style={{ color: levelColor[risk.level] }}>×{risk.multiplier}</strong>
+                    </p>
+                  </div>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.4)", fontWeight: 600 }}>RF Model · 5 Factors</span>
+              </div>
+              {/* Factor bars */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {Object.entries(risk.breakdown).map(([key, f]) => (
+                  <div key={key} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.65)", fontWeight: 600 }}>{f.label}</span>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 800, color: f.score >= 70 ? "#ef4444" : f.score >= 40 ? "#f59e0b" : "#10b981" }}>
+                        {f.score}<span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>/100</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 4, background: "rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${f.score}%`, background: f.score >= 70 ? "#ef4444" : f.score >= 40 ? "#f59e0b" : "#10b981", borderRadius: 4, transition: "width 0.8s ease" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Plan cards with dynamic premiums ── */}
+          <div className="plans-grid">
+            {plans.map((plan) => (
+              <div key={plan.id}
+                className={`plan-card ${form.plan?.id === plan.id ? "plan-selected" : ""}`}
+                style={{ "--plan-color": plan.color, "--plan-bg": plan.bg, "--plan-border": plan.border }}
+                onClick={() => setForm((f) => ({ ...f, plan }))}>
+                <div className="plan-tag">{plan.tag}</div>
+                <div className="plan-emoji">{plan.emoji}</div>
+                <h3 className="plan-name">{plan.name}</h3>
+                <div className="plan-price">
+                  <span className="plan-amount">₹{plan.weeklyPremium}</span>
+                  <span className="plan-period">/week</span>
+                </div>
+                {risk && (
+                  <div style={{ fontSize: "0.72rem", color: plan.color, fontWeight: 600, marginTop: -4 }}>
+                    Base ×{risk.multiplier} risk multiplier
+                  </div>
+                )}
+                <div className="plan-divider" />
+                <ul className="plan-features">
+                  {plan.coverage.map((c) => <li key={c}><span>✓</span> {c}</li>)}
+                </ul>
+                <div className="plan-payout">Max payout: <strong>₹{plan.maxCompensation}/event</strong></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="reg-actions">
+            <button className="reg-btn-ghost" onClick={() => goTo(3)}>← Back</button>
+            <button className="reg-btn-primary" disabled={!form.plan || loading}
+              onClick={() => form.plan && selectPlan(form.plan)}>
+              {loading ? "Setting up..." : `Activate ${form.plan?.name || ""} Plan →`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
 
 function StepBar({ current, total }) {
