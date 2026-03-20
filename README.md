@@ -1,4 +1,3 @@
-Project Title
 
 InsurIntel AI – Intelligent Parametric Insurance Platform
 
@@ -87,13 +86,14 @@ Random Forest consists of multiple decision trees. Each tree analyzes input data
 
 Random Forest will be used for:
 
-   Risk assessment (low, medium, high)
+Risk assessment (low, medium, high)
 
-   Fraud detection (valid or suspicious)
+Fraud detection (valid or suspicious)
+Random Forest is used for fraud detection by analyzing claim history, insurance validity, weather data, and user activity. Multiple  decision trees evaluate the claim, and the final result is decided using voting, which allows the system to automatically detect suspicious  or invalid claims.
 
-   Premium calculation
+Premium calculation-We use Random Forest to predict rider risk based on weather, claim history, and insurance status, and the predicted       risk level is used to dynamically calculate the weekly premium instead of using a fixed price.
 
-   Claim validation
+Claim validation
 
 In the Phase‑1 prototype, the predictions are simulated using rule‑based logic, but the architecture supports real machine learning integration.
 Future AI Improvement — Gradient Boosting
