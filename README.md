@@ -209,3 +209,5 @@ Conclusion
 InsurIntel AI demonstrates a smart parametric insurance platform for gig workers using AI‑based decision logic, automated disruption detection, and weekly micro‑insurance. The system is designed to be scalable and ready for future machine learning integration.
 
 The Phase‑1 prototype successfully shows the idea, workflow, AI plan, and architecture required for a real‑world intelligent insurance system.
+<img width="1024" height="1536" alt="flowchart" src="https://github.com/user-attachments/assets/6d563ed0-41ce-418b-afe3-36a8c5788f99" />
+
